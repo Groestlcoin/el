@@ -1,7 +1,5 @@
 #pragma once
 
-
-
 //!!! #if UCFG_EXTENDED
 #include <el/inc/inc_configs.h>
 //!!! #endif
@@ -35,8 +33,9 @@
 #ifndef UCFG_STDSTL
 #	if !defined(WDM_DRIVER) && (!defined(_MSC_VER) || UCFG_WCE || UCFG_MINISTL)
 #		define UCFG_STDSTL 1
+//!!!? #		define _YVALS_CORE_H
 #else
-#		define UCFG_STDSTL 0		
+#		define UCFG_STDSTL 0
 #	endif
 #endif
 
@@ -60,6 +59,10 @@
 #	else
 #		define UCFG_CRT 'O'
 #	endif
+#endif
+
+#ifndef UCFG_USE_ELRT
+#	define UCFG_USE_ELRT (UCFG_CRT != 'S')
 #endif
 
 #ifndef __STDC_WANT_SECURE_LIB__
@@ -137,13 +140,13 @@
 #endif
 
 #ifndef UCFG_COMCTL_MANIFEST
-#	define UCFG_COMCTL_MANIFEST "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"" 
-#endif	
+#	define UCFG_COMCTL_MANIFEST "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\""
+#endif
 
 
 #ifndef UCFG_TRC
 #	define UCFG_TRC UCFG_DEBUG
-#endif	
+#endif
 
 
 #define _USE_ATTRIBUTES_FOR_SAL 0
@@ -161,7 +164,7 @@
 #		define UCFG_USE_POSIX 1
 #	else
 #		define UCFG_USE_POSIX 0
-#	endif	
+#	endif
 #endif
 
 #ifndef UCFG_COMPLEX_WINAPP
@@ -173,7 +176,7 @@
 #endif
 
 #ifndef UCFG_UPGRADE
-#	define UCFG_UPGRADE UCFG_GUI 
+#	define UCFG_UPGRADE UCFG_GUI
 #endif
 
 
@@ -193,7 +196,7 @@
 #ifndef UCFG_USE_BOOST
 #	if !UCFG_WCE && !defined(_CRTBLD) && !UCFG_MINISTL && !UCFG_WDM && UCFG_STDSTL && !UCFG_USE_POSIX
 #		define UCFG_USE_BOOST 0	//!!!? 1
-#	else	
+#	else
 #		define UCFG_USE_BOOST 0
 #	endif
 #endif
@@ -201,7 +204,7 @@
 #ifndef UCFG_USE_TR1
 #	if !UCFG_WCE && !defined(_CRTBLD) && !UCFG_MINISTL
 #		define UCFG_USE_TR1 1
-#	else	
+#	else
 #		define UCFG_USE_TR1 0
 #	endif
 #endif
@@ -259,7 +262,7 @@
 #endif
 
 #ifndef UCFG_USE_ATL
-#	define UCFG_USE_ATL UCFG_EXTENDED && !UCFG_MINISTL
+#	define UCFG_USE_ATL 0 //!!!? UCFG_EXTENDED && !UCFG_MINISTL
 #endif
 
 #ifndef UCFG_WIN_MSG
@@ -275,7 +278,7 @@
 #endif
 
 #ifndef UCFG_DELAYLOAD_THROW
-#	define UCFG_DELAYLOAD_THROW (UCFG_EXTENDED && !UCFG_WCE)
+#	define UCFG_DELAYLOAD_THROW (UCFG_EXTENDED && !UCFG_WCE && UCFG_MSC_VERSION < 1900)
 #endif
 
 #ifndef UCFG_EHS_EHC_MINUS
@@ -296,11 +299,11 @@
 
 #ifndef UCFG_OCC
 #	define UCFG_OCC (!UCFG_WCE && UCFG_OLE)
-#endif	
+#endif
 
 #ifndef UCFG_COM_IMPLOBJ
 #	define UCFG_COM_IMPLOBJ (!UCFG_WCE && UCFG_OLE)
-#endif	
+#endif
 
 #ifndef UCFG_XML
 #	define UCFG_XML UCFG_FULL
@@ -491,8 +494,12 @@
 #	define UCFG_HAS_REALLOC (!UCFG_WDM)
 #endif
 
-#ifndef UCFG_THREAD_STACK_SIZE
-#	define UCFG_THREAD_STACK_SIZE 65536				// not enough under profiler, can be changed by UCFG_THREAD_STACK_SIZE environment variable
+#ifndef UCFG_THREAD_STACK_SIZE						// Can be changed by UCFG_THREAD_STACK_SIZE environment variable
+#	if UCFG_PLATFORM_X64							// Minimal stack in Windows is 64K, but 128K gives space reserve.
+#		define UCFG_THREAD_STACK_SIZE 262144		// x64 doubles stack requirement
+#	else
+#		define UCFG_THREAD_STACK_SIZE 131072		// 64K may be not enough under profiler
+#	endif
 #endif
 
 #define UCFG_JSON_JANSSON 1
@@ -518,3 +525,10 @@
 #	define UCFG_MANUFACTURER "Ufasoft"
 #endif
 
+#ifndef UCFG_NS_EXT_VC
+#	define UCFG_NS_EXT_VC 1
+#endif
+
+#ifndef UCFG_STL_VERIFY
+#	define UCFG_STL_VERIFY 0
+#endif

@@ -1,4 +1,4 @@
-/*######   Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 1997-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -30,7 +30,7 @@ class CDebugStreambuf : public streambuf {
 #ifdef WIN32
 #	if UCFG_WCE
 		OutputDebugString(String(s));
-#	else		
+#	else
 		OutputDebugStringA(s);
 #	endif
 #elif defined WDM_DRIVER
@@ -71,7 +71,7 @@ public:
 
 #if !UCFG_WDM      //!!!?
 TraceStream::TraceStream(const path& p, bool bAppend)
-	:	base(m_file)
+	: base(m_file)
 {
 	File::OpenInfo oi;
 	oi.Path = p;
@@ -84,12 +84,40 @@ TraceStream::TraceStream(const path& p, bool bAppend)
 	} catch (RCExc) {												// not a showstopper
 	}
 }
+
+void CycledTraceStream::WriteBuffer(const void *buf, size_t count) {
+	{
+		shared_lock<shared_mutex> lk(m_mtx);
+		if (m_file.Length <= m_threshold) {
+			base::WriteBuffer(buf, count);
+			return;
+		}
+	}
+
+	unique_lock<shared_mutex> lk(m_mtx);
+	if (m_file.Length > m_threshold) {
+		m_file.Close();
+		vector<uint8_t> tmp(m_maxSize);
+		{
+			File f(m_path, FileMode::Open, FileAccess::Read);
+			f.Read(&tmp[0], tmp.size(), f.Length - m_maxSize);
+		}
+		File::OpenInfo oi;
+		oi.Path = m_path;
+		oi.Mode = FileMode::Create;
+		oi.Share = FileShare::ReadWrite;
+		m_file.Open(oi);
+		m_file.Write(&tmp[0], tmp.size());
+	}
+	base::WriteBuffer(buf, count);
+}
+
 #endif // !UCFG_WDM
 
 String TruncPrettyFunction(const char *fn) {
 	const char *e = strchr(fn, '('), *b;
-	for (b=e-1; b!=fn; --b)
-		if (b[-1] == ' ') 
+	for (b = e - 1; b != fn; --b)
+		if (b[-1] == ' ')
 			break;
 	return String(b, e-b);
 }
@@ -154,7 +182,7 @@ static class CNullStream : public ostream {
 	};
 public:
 	CNullStream()
-			:	ostream(&m_sbuf)
+			: ostream(&m_sbuf)
 		{
 		}
 private:
@@ -165,13 +193,13 @@ static class CWNullStream : public wostream {
 	class CWNullStreambuf : public wstreambuf {
 		int_type overflow(int_type ch) override { return ch; }
 	};
+
+	CWNullStreambuf m_sbuf;
 public:
 	CWNullStream()
-			:	wostream(&m_sbuf)
+			: wostream(&m_sbuf)
 		{
 		}
-private:
-	CWNullStreambuf m_sbuf;
 } s_wnullStream;
 
 ostream& AFXAPI GetNullStream() {
@@ -186,10 +214,10 @@ static int s_nThreadNumber;
 
 union TinyThreadInfo {
 	struct {
-		byte Counter[3];		//!!!Endianess
-		byte TraceLocks;
+		uint8_t Counter[3]; //!!!Endianess
+		uint8_t TraceLocks;
 	};
-	void *P;
+	int P;
 };
 
 typedef void (*PFNTrace)(const char *, ...);
@@ -270,22 +298,49 @@ ULONG __cdecl DrvTrace(PCH format, ...) {
 
 #else
 
-CTls CFunTrace::s_level;
-static CTls t_threadNumber;
+static THREAD_LOCAL int t_level;
+static THREAD_LOCAL int t_threadNumber;
+static THREAD_LOCAL CLocalTracePrefix *t_tracePrefixes;
+
+CLocalTracePrefix::CLocalTracePrefix(const char *prefix)
+	: m_prefix(prefix)
+	, m_len(strlen(prefix))
+{
+	CLocalTracePrefix* &refPrefix = t_tracePrefixes;
+	m_prev = exchange(refPrefix, this);
+}
+
+CLocalTracePrefix::~CLocalTracePrefix() {
+	t_tracePrefixes = m_prev;
+}
+
+static CGlobalTracePrefix *s_tracePrefixes;
+
+CGlobalTracePrefix::CGlobalTracePrefix(const char *prefix)
+	: m_prefix(prefix)
+	, m_len(strlen(prefix))
+{
+	CGlobalTracePrefix* &refPrefix = s_tracePrefixes;
+	m_prev = exchange(refPrefix, this);
+}
+
+CGlobalTracePrefix::~CGlobalTracePrefix() {
+	s_tracePrefixes = m_prev;
+}
 
 CFunTrace::CFunTrace(const char *funName, int trclevel)
-	:   m_trclevel(trclevel)
-	,	m_funName(funName)
+	: m_funName(funName)
+	, m_trclevel(trclevel)	
 {
-	intptr_t level = (intptr_t)(void*)s_level.Value;
-	TRC(m_trclevel, String(' ', level*2)+">"+m_funName);
-	s_level.Value = (void*)(level+1);
+	int& refLevel = t_level;
+	TRC(m_trclevel, String(' ', refLevel * 2) + ">" + m_funName);
+	++refLevel;
 }
 
 CFunTrace::~CFunTrace() {
-	intptr_t level = (intptr_t)(void*)s_level.Value-1;
-	s_level.Value = (void*)level;
-	TRC(m_trclevel, String(' ', level*2)+"<"+m_funName);
+	int& refLevel = t_level;
+	--refLevel;
+	TRC(m_trclevel, String(' ', refLevel * 2) + "<" + m_funName);
 }
 
 class TraceBlocker {
@@ -294,17 +349,17 @@ public:
 
 	TraceBlocker() {
 		TinyThreadInfo tti;
-		tti.P = t_threadNumber.Value;
+		tti.P = t_threadNumber;
 		Trace = !tti.TraceLocks;
 		++tti.TraceLocks;
-		t_threadNumber.Value = tti.P;
+		t_threadNumber = tti.P;
 	}
 
 	~TraceBlocker() {
 		TinyThreadInfo tti;
-		tti.P = t_threadNumber.Value;
+		tti.P = t_threadNumber;
 		--tti.TraceLocks;
-		t_threadNumber.Value = tti.P;
+		t_threadNumber = tti.P;
 	}
 };
 
@@ -319,15 +374,15 @@ inline intptr_t AFXAPI GetThreadNumber() {
 #elif defined(__linux__)
 	return syscall(SYS_gettid);
 #else
-	intptr_t r = (intptr_t)(void*)t_threadNumber.Value;
+	int r = t_threadNumber;
 	if (!(r & 0xFFFFFF))
-		t_threadNumber.Value = (void*)(uintptr_t)(r |= ++s_nThreadNumber);
+		t_threadNumber = (r |= ++s_nThreadNumber);
 	return r & 0xFFFFFF;
 #endif
 }
 
 CTraceWriter::CTraceWriter(int level, const char* funname) noexcept
-	:	m_pos(level & CTrace::s_nLevel ? CTrace::s_pOstream : 0)
+	: m_pos(level & CTrace::s_nLevel ? CTrace::s_pOstream : 0)
 {
 	if (m_pos) {
 		m_bPrintDate = CTrace::s_bPrintDate;
@@ -336,15 +391,27 @@ CTraceWriter::CTraceWriter(int level, const char* funname) noexcept
 }
 
 CTraceWriter::CTraceWriter(Ext::Stream *pos) noexcept
-	:	m_pos(pos)
-	,	m_bPrintDate(true)
+	: m_pos(pos)
+	, m_bPrintDate(true)
 {
 	Init(0);
 }
 
 void CTraceWriter::Init(const char* funname) {
-	if (funname)
+	if (funname) {
+		for (CLocalTracePrefix *pPrefix = t_tracePrefixes; pPrefix; pPrefix = pPrefix->m_prev)
+			if (!strncmp(pPrefix->m_prefix, funname, pPrefix->m_len)) {
+				funname += pPrefix->m_len;
+				break;
+			}
+		for (CGlobalTracePrefix *pPrefix = s_tracePrefixes; pPrefix; pPrefix = pPrefix->m_prev)
+			if (!strncmp(pPrefix->m_prefix, funname, pPrefix->m_len)) {
+				funname += pPrefix->m_len;
+				break;
+			}
+
 		m_os << funname << " ";
+	}
 }
 
 #if UCFG_USE_POSIX
@@ -357,14 +424,15 @@ CTraceWriter::~CTraceWriter() noexcept {
 	if (m_pos) {
 		m_os.put('\n');
 		string str = m_os.str();
-		LocalDateTime dt = Clock::now().ToLocalTime();
-		tm t = dt;
-		int mst = dt.Ticks / 1000 % 10000;
+		DateTime dt = Clock::now();
+		tm t;
+		dt.ToLocalTm(t);
+		int mst = dt.Ticks / 100 % 100000;
 		long long tid = GetThreadNumber();
 		char bufTime[20], buf[100];
-		sprintf(bufTime, " %02d:%02d:%02d.%04d ", t.tm_hour, t.tm_min, t.tm_sec, mst);
+		sprintf(bufTime, " %02d:%02d:%02d.%05d ", t.tm_hour, t.tm_min, t.tm_sec, mst);
 		if (m_bPrintDate)
-			sprintf(buf, EXT_TID_FORMATTER " %4d-%02d-%02d%s", tid, 1900+int(t.tm_year), t.tm_mon, t.tm_mday, bufTime);
+			sprintf(buf, EXT_TID_FORMATTER " %4d-%02d-%02d%s", tid, 1900 + int(t.tm_year), t.tm_mon, t.tm_mday, bufTime);
 		else
 			sprintf(buf, EXT_TID_FORMATTER "%s", tid, bufTime);
 		string date_s = buf + str;
@@ -379,6 +447,7 @@ CTraceWriter::~CTraceWriter() noexcept {
 		if (traceBlocker.Trace)
 #endif
 		{
+#if _HAS_EXCEPTIONS
 			try {
 				m_pos->WriteBuffer(date_s.data(), date_s.size());
 			} catch (RCExc) {}
@@ -387,6 +456,11 @@ CTraceWriter::~CTraceWriter() noexcept {
 					pSecondStream->WriteBuffer(time_str.data(), time_str.size());
 				} catch (RCExc) {}
 			}
+#else
+			m_pos->WriteBuffer(date_s.data(), date_s.size());
+			if (Ext::Stream *pSecondStream = CTrace::s_pSecondStream)
+				pSecondStream->WriteBuffer(time_str.data(), time_str.size());
+#endif
 		}
 	}
 }
@@ -426,10 +500,8 @@ void CTraceWriter::StaticPrintf(int level, const char* funname, const char* fmt,
 	w.Stream() << funname << ":\t";
 	va_list args;
 	va_start(args, fmt);
-	w.VPrintf(fmt, args);	
+	w.VPrintf(fmt, args);
 }
 
 
 } // Ext::
-
-

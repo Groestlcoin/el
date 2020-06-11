@@ -1,4 +1,4 @@
-/*######   Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 1997-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -13,6 +13,10 @@
 #if !UCFG_WCE
 #	include <wincon.h>
 #endif
+
+
+#include "extmsg_.h"
+
 
 #include <psapi.h>
 
@@ -78,7 +82,7 @@ public:
 	{}
 
 	Size(const SIZE& size)
-		:	SIZE(size)
+		: SIZE(size)
 	{}
 
 	Size(int initCX, int initCY) {
@@ -156,7 +160,7 @@ public:
 	Rectangle()
 	{}
 
-	Rectangle(int l, int t, int w, int h) { 
+	Rectangle(int l, int t, int w, int h) {
 		left = l;
 		top = t;
 		right = l+w;
@@ -164,7 +168,7 @@ public:
 	}
 
 	Rectangle(const RECT& rect)
-		:	RECT(rect)
+		: RECT(rect)
 	{}
 
 	Rectangle(const POINT& point, const SIZE& size) {
@@ -253,7 +257,7 @@ typedef Rectangle Rect;
 }
 
 #			if UCFG_OLE
-#				include "ext-com.h"	
+#				include "ext-com.h"
 #				include "excom.h"
 #			endif
 
@@ -297,7 +301,7 @@ namespace Ext
 	*/
 
 	/*!!!
-	template<> struct hash<String> 
+	template<> struct hash<String>
 	{
 	size_t operator()(RCString s) const
 	};
@@ -368,15 +372,15 @@ public:
 	SafeHandle::HandleAccess m_ha;
 
 	COvlEvent()
-		:	m_ha(m_ev)
+		: m_ha(m_ev)
 	{
 		ZeroStruct(*static_cast<OVERLAPPED*>(this));
 		hEvent = (HANDLE)(intptr_t)m_ha;
 	}
 
 	COvlEvent(bool)
-		:	m_ev(false, true)
-		,	m_ha(m_ev)
+		: m_ev(false, true)
+		, m_ha(m_ev)
 	{
 		ZeroStruct(*static_cast<OVERLAPPED*>(this));
 		hEvent = (HANDLE)(intptr_t)m_ha;
@@ -384,30 +388,30 @@ public:
 };
 
 ENUM_CLASS(DialogResult) {
-	Yes = IDYES,
-		No = IDNO,
-		Cancel = IDCANCEL
+	Yes			= IDYES
+	, No		= IDNO
+	, Cancel	= IDCANCEL
 } END_ENUM_CLASS(DialogResult)
 
 ENUM_CLASS(MessageBoxButtons) {
-	OK	= MB_OK,
-		OKCancel	= MB_OKCANCEL,
-		AbortRetryIgnore = MB_ABORTRETRYIGNORE,
-		YesNoCancel	= MB_YESNOCANCEL,
-		YesNo		= MB_YESNO,
-		RetryCancel	= MB_RETRYCANCEL
-	} END_ENUM_CLASS(MessageBoxButtons)
+	OK				= MB_OK
+	, OKCancel		= MB_OKCANCEL
+	, AbortRetryIgnore = MB_ABORTRETRYIGNORE
+	, YesNoCancel	= MB_YESNOCANCEL
+	, YesNo			= MB_YESNO
+	, RetryCancel	= MB_RETRYCANCEL
+} END_ENUM_CLASS(MessageBoxButtons)
 
 ENUM_CLASS(MessageBoxIcon) {
-		Stop		= MB_ICONSTOP,
-		Exclamation = MB_ICONEXCLAMATION,
-		Error		= MB_ICONERROR,
-		Warning		= MB_ICONWARNING,
-		Information = MB_ICONINFORMATION,
-		Question	= MB_ICONQUESTION,
-		Hand		= MB_ICONHAND,
-		Asterisk	= MB_ICONASTERISK
-	} END_ENUM_CLASS(MessageBoxIcon)
+	Stop			= MB_ICONSTOP
+	, Exclamation	= MB_ICONEXCLAMATION
+	, Error			= MB_ICONERROR
+	, Warning		= MB_ICONWARNING
+	, Information	= MB_ICONINFORMATION
+	, Question		= MB_ICONQUESTION
+	, Hand			= MB_ICONHAND
+	, Asterisk		= MB_ICONASTERISK
+} END_ENUM_CLASS(MessageBoxIcon)
 
 class MessageBox {
 public:
@@ -415,34 +419,33 @@ public:
 	EXT_API static DialogResult AFXAPI Show(RCString text, RCString caption, int buttons, MessageBoxIcon icon = (MessageBoxIcon)0);
 };
 
-
 enum COsVersion {
-	OSVER_FLAG_NT      = 0x200,
-	OSVER_FLAG_UNICODE = 0x20,
-	OSVER_FLAG_CE      = 0x40 | OSVER_FLAG_UNICODE,
-	OSVER_FLAG_SERVER   = 0x80,
-	OSVER_FLAG_2K_BRANCH = 0x100 | OSVER_FLAG_NT | OSVER_FLAG_UNICODE,
-
-	OSVER_95      = 1,
-	OSVER_98      = 2,
-	OSVER_ME      = 3,
-	OSVER_NT4     = 4 | OSVER_FLAG_NT | OSVER_FLAG_UNICODE,
-	OSVER_2000    = 5 | OSVER_FLAG_2K_BRANCH,
-	OSVER_XP      = 6 | OSVER_FLAG_2K_BRANCH,
-	OSVER_CE      = 7 | OSVER_FLAG_CE,
-	OSVER_CE_4		= 8 | OSVER_FLAG_CE,
-	OSVER_SERVER_2003 = 9 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER,
-	OSVER_VISTA = 10 | OSVER_FLAG_2K_BRANCH,
-	OSVER_2008 = 10 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER,
-	OSVER_CE_5  = 9 | OSVER_FLAG_CE,
-	OSVER_CE_6  = 10 | OSVER_FLAG_CE,
-	OSVER_CE_FUTURE  = 11 | OSVER_FLAG_CE,
-	OSVER_7 = 13 | OSVER_FLAG_2K_BRANCH,
-	OSVER_2008_R2 = 13 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER,
-	OSVER_8 = 14 | OSVER_FLAG_2K_BRANCH,
-	OSVER_8_1 = 15 | OSVER_FLAG_2K_BRANCH,
-	OSVER_10 = 16 | OSVER_FLAG_2K_BRANCH,
-	OSVER_FUTURE = 17 | OSVER_FLAG_2K_BRANCH
+	OSVER_FLAG_NT      = 0x200
+	, OSVER_FLAG_UNICODE = 0x20
+	, OSVER_FLAG_CE      = 0x40 | OSVER_FLAG_UNICODE
+	, OSVER_FLAG_SERVER   = 0x80
+	, OSVER_FLAG_2K_BRANCH = 0x100 | OSVER_FLAG_NT | OSVER_FLAG_UNICODE
+	
+	, OSVER_95      = 1
+	, OSVER_98      = 2
+	, OSVER_ME      = 3
+	, OSVER_NT4     = 4 | OSVER_FLAG_NT | OSVER_FLAG_UNICODE
+	, OSVER_2000    = 5 | OSVER_FLAG_2K_BRANCH
+	, OSVER_XP      = 6 | OSVER_FLAG_2K_BRANCH
+	, OSVER_CE      = 7 | OSVER_FLAG_CE
+	, OSVER_CE_4		= 8 | OSVER_FLAG_CE
+	, OSVER_SERVER_2003 = 9 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER
+	, OSVER_VISTA = 10 | OSVER_FLAG_2K_BRANCH
+	, OSVER_2008 = 10 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER
+	, OSVER_CE_5  = 9 | OSVER_FLAG_CE
+	, OSVER_CE_6  = 10 | OSVER_FLAG_CE
+	, OSVER_CE_FUTURE  = 11 | OSVER_FLAG_CE
+	, OSVER_7 = 13 | OSVER_FLAG_2K_BRANCH
+	, OSVER_2008_R2 = 13 | OSVER_FLAG_2K_BRANCH | OSVER_FLAG_SERVER
+	, OSVER_8 = 14 | OSVER_FLAG_2K_BRANCH
+	, OSVER_8_1 = 15 | OSVER_FLAG_2K_BRANCH
+	, OSVER_10 = 16 | OSVER_FLAG_2K_BRANCH
+	, OSVER_FUTURE = 17 | OSVER_FLAG_2K_BRANCH
 };
 
 AFX_API COsVersion AFXAPI GetOsVersion();
@@ -463,12 +466,12 @@ public:
 	DEFPROP_GET(const VS_FIXEDFILEINFO&, FixedInfo);
 
 	Version GetFileVersionN() {
-		const VS_FIXEDFILEINFO& fi = FixedInfo;		
-		return Version::FromFileInfo(fi.dwFileVersionMS, fi.dwFileVersionLS);	
+		const VS_FIXEDFILEINFO& fi = FixedInfo;
+		return Version::FromFileInfo(fi.dwFileVersionMS, fi.dwFileVersionLS);
 	}
 
 	Version GetProductVersionN() {
-		const VS_FIXEDFILEINFO& fi = FixedInfo;		
+		const VS_FIXEDFILEINFO& fi = FixedInfo;
 		return Version::FromFileInfo(fi.dwProductVersionMS, fi.dwProductVersionLS);
 	}
 
@@ -501,6 +504,7 @@ public:
 };
 
 class ProcessModule {
+	MODULEINFO m_mi;
 public:
 	Process Process;
 	CInt<HMODULE> HModule;
@@ -529,14 +533,15 @@ public:
 		return Ext::FileVersionInfo(FileName);
 	}
 	DEFPROP_GET_CONST(Ext::FileVersionInfo, FileVersionInfo);
-private:
-	MODULEINFO m_mi;
 };
 
 std::vector<ProcessModule> GetProcessModules(Process& process);
 
 class Wow64FsRedirectionKeeper {
 	typedef Wow64FsRedirectionKeeper class_type;
+
+	void* m_oldValue;
+	CBool m_bDisabled;
 public:
 	Wow64FsRedirectionKeeper() {}
 
@@ -547,9 +552,6 @@ public:
 	void Disable();
 	~Wow64FsRedirectionKeeper();
 private:
-	void *m_oldValue;
-	CBool m_bDisabled;
-
 	EXT_DISABLE_COPY_CONSTRUCTOR
 };
 
@@ -558,7 +560,7 @@ public:
 	void *m_address;
 
 	CVirtualMemory()
-		:	m_address(0)
+		: m_address(0)
 	{}
 
 	CVirtualMemory(void *lpAddress, DWORD dwSize, DWORD flAllocationType = MEM_RESERVE, DWORD flProtect = PAGE_READWRITE);
@@ -569,6 +571,7 @@ public:
 };
 
 class CHeap {
+	HANDLE m_h;
 public:
 	CHeap();
 	~CHeap();
@@ -576,8 +579,6 @@ public:
 	size_t Size(void *p, DWORD flags = 0);
 	void *Alloc(size_t size, DWORD flags = 0);
 	void Free(void *p, DWORD flags = 0);
-private:
-	HANDLE m_h;
 };
 
 #if UCFG_WND
@@ -585,7 +586,7 @@ template <class T> class CHandleMap {
 	std::unordered_map<HANDLE, T*> m_permanentMap;
 	std::unordered_map<HANDLE, T*> m_temporaryMap;
 public:
-	~CHandleMap() { 
+	~CHandleMap() {
 		DeleteTemp();
 	}
 
@@ -625,19 +626,15 @@ template <class T> void CHandleMap<T>::SetPermanent(HANDLE h, T* permOb) {
 }
 
 template <class T> void CHandleMap<T>::RemoveHandle(HANDLE h) {
-	m_permanentMap.erase(h);  
+	m_permanentMap.erase(h);
 }
 
 template <class T> T* CHandleMap<T>::LookupPermanent(HANDLE h) {
-	T *p = 0;
-	Lookup(m_permanentMap, h, p);
-	return p;
+	return Lookup(m_permanentMap, h).value_or((T*)0);
 }
 
 template <class T> T* CHandleMap<T>::LookupTemporary(HANDLE h) {
-	T *p = 0;
-	Lookup(m_temporaryMap, h, p);
-	return p;
+	return Lookup(m_temporaryMap, h).value_or((T*)0);
 }
 #endif
 
@@ -724,7 +721,7 @@ public:
 	~AFX_MODULE_THREAD_STATE();
 	CThreadHandleMaps& GetHandleMaps();
 private:
-	std::auto_ptr<CThreadHandleMaps> m_handleMaps;
+	std::unique_ptr<CThreadHandleMaps> m_handleMaps;
 };
 
 AFX_API AFX_MODULE_THREAD_STATE * AFXAPI AfxGetModuleThreadState();
@@ -756,7 +753,7 @@ public:
 	CFactories m_factoryList;
 #endif
 #if UCFG_OCC
-	observer_ptr<COccManager> m_pOccManager;	
+	observer_ptr<COccManager> m_pOccManager;
 #endif
 	void (AFXAPI *m_pfnFilterToolTipMessage)(MSG*, CWnd*);
 #if defined(_AFXDLL) && UCFG_EXTENDED
@@ -773,7 +770,6 @@ public:
 	explicit AFX_MODULE_STATE(bool bDLL);
 #endif
 	bool m_bDLL;
-
 
 	~AFX_MODULE_STATE();
 
@@ -825,8 +821,8 @@ public:
 	observer_ptr<CWnd> m_pAlternateWndInit;
 	HWND m_hLockoutNotifyWindow;    // see CWnd::OnCommand
 	observer_ptr<CWnd> m_pLastHit;
+	void* m_pLastInfo;			//	TOOLINFO
 	int m_nLastHit;
-	void *m_pLastInfo;			//	TOOLINFO
 	int m_nLastStatus;      // last flyby status message
 	bool m_bInMsgFilter;
 	bool m_bDlgCreate;
@@ -837,17 +833,18 @@ public:
 
 
 struct AFX_CLASS AFX_MAINTAIN_STATE2 {
-	AFX_MAINTAIN_STATE2(AFX_MODULE_STATE* pModuleState);
-	~AFX_MAINTAIN_STATE2();
 protected:
 	AFX_MODULE_STATE* m_pPrevModuleState;
+public:
+	AFX_MAINTAIN_STATE2(AFX_MODULE_STATE* pModuleState);
+	~AFX_MAINTAIN_STATE2();
 };
 
 class AFX_CLASS AFX_MAINTAIN_STATE_COM : public AFX_MAINTAIN_STATE2 {
 	typedef AFX_MAINTAIN_STATE2 base;
 public:
+	String Description;
 	HRESULT HResult;
-	String Description;	
 
 	AFX_MAINTAIN_STATE_COM(CComObjectRootBase *pBase);
 	AFX_MAINTAIN_STATE_COM(CComClass *pComClass);
@@ -913,12 +910,13 @@ class CodepageCvt : public std::codecvt<wchar_t, char, mbstate_t> {
 	typedef std::codecvt<wchar_t, char, mbstate_t> base;
 public:
 	explicit CodepageCvt(int cp)
-		:	m_cp(cp)
+		: m_cp(cp)
 	{}
 private:
 	int m_cp;
 
 	EXT_API result do_out(mbstate_t& state, const wchar_t *_First1, const wchar_t *_Last1, const wchar_t *& _Mid1, char *_First2, char *_Last2, char *& _Mid2) const override;
+//	EXT_API result do_in(mbstate_t& s, const char *fb, const char *fe, const char *&fn, wchar_t *tb, wchar_t *te, wchar_t *&tn) const override;
 };
 
 AFX_API void AFXAPI AfxCoreInitModule();
@@ -935,6 +933,13 @@ AFX_API void * AFXAPI AfxGetResource(const CResID& resID, const CResID& lpszType
 AFX_API bool AFXAPI AfxHasResourceString(UINT nIDS);
 AFX_API bool AFXAPI AfxHasResource(const CResID& name, const CResID& typ);
 
+
+inline SYSTEM_INFO AFXAPI GetSystemInfo() {
+	SYSTEM_INFO r;
+	::GetSystemInfo(&r);
+	return r;
+}
+
 } // Ext::
 
 #if UCFG_WCE
@@ -942,5 +947,3 @@ AFX_API bool AFXAPI AfxHasResource(const CResID& name, const CResID& typ);
 #else
 	typedef HINSTANCE HINST;
 #endif
-
-

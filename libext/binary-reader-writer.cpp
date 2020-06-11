@@ -1,4 +1,4 @@
-/*######   Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 1997-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -79,21 +79,20 @@ void BinaryWriter::Write(const VARIANT& v) {
 	case VT_CY:
 	case VT_BOOL:
 	case VT_BSTR:
-		_self << byte(v.vt);
+		_self << uint8_t(v.vt);
 		WriteVariantOfType(v, v.vt);
 		break;
 	default:
 		if (VarIsArray(v)) {
 			CSafeArray sa((SAFEARRAY*&)v.parray);
 			_self << VT_ARRAY_EX;
-			byte elType = byte(v.vt);
+			uint8_t elType = uint8_t(v.vt);
 			_self << elType;
-			byte dims = (byte)sa.DimCount;
+			uint8_t dims = (uint8_t)sa.DimCount;
 			_self << dims;
-			switch (dims)
-			{
+			switch (dims) {
 			case 1:
-				{ 
+				{
 					LONG dim1 = sa.GetLBound(),
 						dim2 = sa.GetUBound();
 					_self << dim1 << dim2;
@@ -122,26 +121,39 @@ void BinaryWriter::Write(const VARIANT& v) {
 }
 #endif	// UCFG_OLE
 
-BinaryWriter& BinaryWriter::operator<<(const ConstBuf& mb) {
-	WriteSize(mb.Size);
-	BaseStream.WriteBuffer(mb.P, mb.Size);
+BinaryWriter& BinaryWriter::Write(RCSpan mb) {
+	WriteSize(mb.size());
+	BaseStream.Write(mb);
 	return _self;
 }
 
-const BinaryReader& BinaryReader::operator>>(Blob& blob) const {
-	const size_t INITIAL_BUFSIZE = 512;
+static const size_t INITIAL_BUFSIZE = 4096;
 
+const BinaryReader& BinaryReader::operator>>(Blob& blob) const {
 	size_t size = ReadSize();
 	if (size <= INITIAL_BUFSIZE) {
-		blob.Size = size;
+		blob.resize(size);
 		Read(blob.data(), size);
 	} else {																			// to prevent OutOfMemory exception if just error in the Size field
-		for (size_t curSize = INITIAL_BUFSIZE, offset=0; offset<size; offset=curSize) {
-			blob.Size = curSize = min(size_t(curSize*2), size);
-			Read(blob.data()+offset, curSize-offset);
+		for (size_t curSize = INITIAL_BUFSIZE, offset = 0; offset < size; offset = curSize) {
+			blob.resize(curSize = min(size_t(curSize * 2), size));
+			Read(blob.data() + offset, curSize - offset);
 		}
 	}
 	return _self;
+}
+
+void AutoBlobBase::DoRead(const BinaryReader& rd, size_t szSpace) {
+	size_t size = rd.ReadSize();
+	if (size <= INITIAL_BUFSIZE) {
+		DoResize(size, false, szSpace);
+		rd.Read(Data(szSpace), size);
+	} else {																			// to prevent OutOfMemory exception if just error in the Size field
+		for (size_t curSize = INITIAL_BUFSIZE, offset = 0; offset < size; offset = curSize) {
+			DoResize(curSize = min(size_t(curSize * 2), size), false, szSpace);
+			rd.Read(Data(szSpace) + offset, curSize - offset);
+		}
+	}
 }
 
 void BinaryWriter::WriteString(RCString v) {
@@ -174,25 +186,25 @@ const BinaryReader& BinaryReader::operator>>(CStringVector& ar) const {
 Blob BinaryReader::ReadToEnd() const {
 	MemoryStream ms;
 	BaseStream.CopyTo(ms);
-	return ms.Blob;
+	return ms.AsSpan();
 }
 
-uint64_t AFXAPI Read7BitEncoded(const byte *&p) {
-	const byte *q = p;										//O local pointer is faster
-	byte b = *q++;
+uint64_t AFXAPI Read7BitEncoded(const uint8_t*& p) {
+	const uint8_t* q = p; //O local pointer is faster
+	uint8_t b = *q++;
 	uint64_t r = b & 0x7F;									//O for 1-byte records
-	for (int shift=7; b & 0x80;) {
+	for (uint8_t shift = 7; b & 0x80;) {
 		r |= uint64_t((b = *q++) & 0x7F) << shift;
-		if ((shift+=7) >= 64)
+		if ((shift += 7) >= 64)
 			Throw(E_FAIL);
 	}
 	p = q;
 	return r;
 }
 
-void AFXAPI Write7BitEncoded(byte *&p, uint64_t v) {
+void AFXAPI Write7BitEncoded(uint8_t*& p, uint64_t v) {
 	do {
-		byte b = v & 0x7F;
+		uint8_t b = v & 0x7F;
 		if (v >>= 7)
 			b |= 0x80;
 		*p++ = b;
@@ -200,15 +212,15 @@ void AFXAPI Write7BitEncoded(byte *&p, uint64_t v) {
 }
 
 void BinaryWriter::Write7BitEncoded(uint64_t v) {
-	byte buf[10], *p = buf;
+	uint8_t buf[10], *p = buf;
 	Ext::Write7BitEncoded(p, v);
 	Write(buf, p-buf);
 }
 
 uint64_t BinaryReader::Read7BitEncoded() const {
 	uint64_t r = 0;
-	for (int shift=0; shift<64; shift+=7) {
-		byte b = ReadByte();
+	for (int shift = 0; shift < 64; shift += 7) {
+		uint8_t b = ReadByte();
 		r |= uint64_t(b & 0x7F) << shift;
 		if (!(b & 0x80))
 			return r;

@@ -82,9 +82,13 @@ namespace std {
 #	define EXT_CONVERTIBLE_TO_TRUE true
 #	define _TYPEDEF_BOOL_TYPE
 #else
-#	define EXPLICIT_OPERATOR_BOOL struct _Boolean { int i; }; operator int _Boolean::* 
+#	define EXPLICIT_OPERATOR_BOOL struct _Boolean { int i; }; operator int _Boolean::*
 #	define EXT_OPERATOR_BOOL operator _Bool_type
 #	define EXT_CONVERTIBLE_TO_TRUE (&_Boolean::i)
+#endif
+
+#ifdef _MSC_VER
+#   include <eh.h>
 #endif
 
 #if !UCFG_STD_UNCAUGHT_EXCEPTIONS
@@ -150,7 +154,7 @@ char(*EXT__countof_helper(UNALIGNED T(&ar)[sz]))[sz];		// constexpr emulation
 
 
 template <class T, size_t sz>
-constexpr inline size_t size(T (&ar)[sz]) {
+constexpr inline size_t size(const T (&ar)[sz]) {
 	return sz;
 }
 
@@ -176,6 +180,20 @@ constexpr inline size_t size(T (&ar)[sz]) {
 #if !UCFG_STD_UNCAUGHT_EXCEPTIONS || !UCFG_STDSTL
 inline int __cdecl uncaught_exceptions() noexcept { return __uncaught_exceptions(); }
 #endif // !UCFG_STD_UNCAUGHT_EXCEPTIONS
+
+#if !UCFG_STD_CLAMP
+
+template <typename T, class L>
+T clamp(const T& v, const T& lo, const T& hi, L pred) {
+	return pred(v, lo) ? lo : pred(hi, v) ? hi : v;
+}
+
+template <typename T>
+T clamp(const T& v, const T& lo, const T& hi) {
+	return clamp<T, std::less<T>>(v, lo, hi, std::less<T>());
+}
+
+#endif // #if !UCFG_STD_OBSERVER_PTR
 
 #if !UCFG_STD_OBSERVER_PTR
 
@@ -222,8 +240,6 @@ public:
 	}
 	*/
 	void reset(pointer p) { m_p = p; }										//!!!TODO  = nullptr
-private:
-//!!!R	T *m_p;
 };
 
 #endif // !UCFG_STD_OBSERVER_PTR
@@ -231,4 +247,3 @@ private:
 
 
 } // std::
-

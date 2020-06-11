@@ -7,14 +7,16 @@
 
 #include EXT_HEADER(list)
 
+#include EXT_HEADER_OPTIONAL
 
 namespace Ext {
-
+using std::unordered_map,
+	std::optional, std::nullopt;
 
 template <class T> class Array {
 public:
 	Array(size_t size)
-		:	m_p(new T[size])
+		: m_p(new T[size])
 	{
 	}
 
@@ -31,7 +33,7 @@ private:
 template<> class Array<char> {
 public:
 	Array(size_t size)
-		:	m_p((char*)Malloc(size))
+		: m_p((char*)Malloc(size))
 	{
 	}
 
@@ -113,7 +115,7 @@ public:
 template <class T> class CMTQueue {
 	size_t m_cap;
 	size_t m_mask;
-	std::unique_ptr<byte> m_buf;
+	std::unique_ptr<uint8_t> m_buf;
 	T * volatile m_r, * volatile m_w;
 public:
 	explicit CMTQueue(size_t cap)
@@ -123,7 +125,7 @@ public:
 		for (size_t n=cap; n; n>>=1)
 			if (!(n & 1))
 				Throw(E_FAIL);
-		m_buf.reset(new byte[sizeof(T)*m_cap]);
+		m_buf.reset(new uint8_t[sizeof(T) * m_cap]);
 		m_r = m_w = (T*)m_buf.get();
 	}
 
@@ -185,15 +187,11 @@ bool ContainsInLinear(const C& c, const T& key) {
 	return find(c.begin(), c.end(), key) != c.end();
 }
 
-template <class M, class K, class T>
-bool Lookup(const M& m, const K& key, T& val) {
-	typename M::const_iterator i = m.find(key);
-	if (i == m.end())
-		return false;
-	val = i->second;
-	return true;
+template <class K, class T>
+optional<T> Lookup(const unordered_map<K, T>& m, const K& key) {
+	typename unordered_map<K, T>::const_iterator i = m.find(key);
+	return i == m.end() ? optional<T>(nullopt) : i->second;
 }
-
 
 template <typename S1, typename S2>
 typename S1::const_iterator Search(const S1& s1, const S2& s2) {
@@ -443,12 +441,11 @@ public:
 		ASSERT_INTRUSIVE;
 	}
 protected:
-	byte m_base[sizeof(value_type)];
+	uint8_t m_base[sizeof(value_type)];
 	size_t m_size;
 	
 	const T *getP() const { return (const T*)m_base; }
 	T *getP() { return (T*)m_base; }
-
 };
 
 
@@ -582,25 +579,6 @@ public:
 	}
 };
 
-template <typename T, class L>
-bool between(const T& v, const T& lo, const T& hi, L pred) {
-	return !pred(v, lo) && !pred(hi, v);
-}
-
-template <typename T>
-bool between(const T& v, const T& lo, const T& hi) {
-	return between<T, std::less<T>>(v, lo, hi, std::less<T>());
-}
-
-template <typename T, class L>
-T clamp(const T& v, const T& lo, const T& hi, L pred) {
-	return pred(v, lo) ? lo : pred(hi, v) ? hi : v;
-}
-
-template <typename T>
-T clamp(const T& v, const T& lo, const T& hi) {
-	return clamp<T, std::less<T>>(v, lo, hi, std::less<T>());
-}
 
 template <typename T>
 T RoundUpToMultiple(const T& x, const T& mul) {
@@ -631,7 +609,7 @@ public:
 	operator T&() { return *m_p; }
 private:
 	T *m_p;
-	byte m_placeTx[sizeof(T)];
+	uint8_t m_placeTx[sizeof(T)];
 	CBool m_bOwn;
 };
 #endif // !UCFG_WDM

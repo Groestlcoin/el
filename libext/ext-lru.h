@@ -1,7 +1,11 @@
 #pragma once
 
+#include EXT_HEADER_OPTIONAL
+
 namespace Ext {
 using std::pair;
+using std::optional;
+using std::nullopt;
 
 #ifndef UCFG_DEFAULT_CACHE_SIZE
 #	define UCFG_DEFAULT_CACHE_SIZE 256
@@ -15,7 +19,7 @@ struct LruTraits {
 struct UnorderedLruItem {
 	UnorderedLruItem *Next, *Prev;
 	void *Key;
-	//!!!	byte m_iter[LruTraits<std::unordered_map<int, int> >::IteratorSize];
+	//!!!	uint8_t m_iter[LruTraits<std::unordered_map<int, int> >::IteratorSize];
 };
 
 template <typename K, typename T, typename C>
@@ -125,7 +129,7 @@ protected:
 	}
 
 #if !UCFG_STDSTL														// really works only in ExtSTL
-	std::observer_ptr<byte> m_pTemporaryFreed;
+	std::observer_ptr<uint8_t> m_pTemporaryFreed;
 
 	~LruBase() {
 		if (m_pTemporaryFreed)
@@ -140,7 +144,7 @@ protected:
 
 	void __fastcall VFreeNode(void *p) override {
 		if (!m_pTemporaryFreed)
-			m_pTemporaryFreed.reset((byte*)p);
+			m_pTemporaryFreed.reset((uint8_t*)p);
 		else
 			base::VFreeNode(p);
 	}
@@ -202,12 +206,9 @@ private:
 };
 
 template <class K, class T, class C>
-bool Lookup(LruMap<K, T, C>& m, const K& key, T& val) {
+std::optional<T> Lookup(LruMap<K, T, C>& m, const K& key) {
 	typename LruMap<K, T, C>::iterator i = m.find(key);
-	if (i == m.end())
-		return false;
-	val = i->second.first;
-	return true;
+	return i == m.end() ? std::optional<T>(nullopt) : i->second.first;
 }
 
 

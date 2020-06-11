@@ -1,4 +1,4 @@
-/*######   Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 1997-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -18,10 +18,15 @@
 namespace Ext {
 using namespace std;
 
-bool AFXAPI operator==(const ConstBuf& x, const ConstBuf& y) {
-	return !x.P || !y.P
-		? x.P == y.P
-		: x.Size==y.Size && (x.P==y.P || !memcmp(x.P, y.P, x.Size));
+void ThrowNonEmptyPointer() {
+	Throw(ExtErr::NonEmptyPointer);
+}
+
+bool AFXAPI Equal(RCSpan x, RCSpan y) {
+    const uint8_t *px = x.data(), *py = y.data();
+	return !px || !py
+        ? px == py
+        : x.size() == y.size() && (px == py || !memcmp(px, py, x.size()));
 }
 
 void CPrintable::Print(ostream& os) const {
@@ -50,202 +55,6 @@ const class CRuntimeClass Object::classObject =
 	}
 #endif
 
-bool CHandleBaseBase::Close(bool bFromDtor) {
-	bool r = false;
-	bool prev = false;
-	if (m_abClosed.compare_exchange_strong(prev, true)) {
-#if UCFG_USE_IN_EXCPETION
-		if (bFromDtor && InException) {
-			try {
-				r = Release();
-			} catch (RCExc) {
-			}
-		} else
-#endif
-			r = Release();
-	}
-	return r;
-}
-
-
-#ifndef WDM_DRIVER
-EXT_THREAD_PTR(void) SafeHandle::t_pCurrentHandle;
-#endif
-
-SafeHandle::HandleAccess::~HandleAccess() {	
-#if !defined(_MSC_VER) || defined(_CPPUNWIND)
-			try //!!!
-#endif
-			{
-				Release();
-			}
-#if !defined(_MSC_VER) || defined(_CPPUNWIND)
-			catch (RCExc) {
-			}
-#endif
-}
-
-SafeHandle::SafeHandle(intptr_t handle)
-	:	m_aHandle(handle)
-	,	m_invalidHandleValue(-1)
-#ifdef WDM_DRIVER
-	,	m_pObject(nullptr)
-#endif
-{
-	m_abClosed = false;
-	m_aInUse = 1;
-
-#ifdef WIN32
-	Win32Check(Valid());
-#endif
-}
-
-SafeHandle::~SafeHandle() {
-	InternalReleaseHandle();
-}
-
-void SafeHandle::InternalReleaseHandle() const {
-	intptr_t h = m_aHandle.exchange(m_invalidHandleValue);
-	if (h != m_invalidHandleValue) {
-		if (m_bOwn) //!!!
-			ReleaseHandle(h);
-	}
-#if UCFG_WDM
-	if (m_CreatedReference) {
-		if (m_pObject) {
-			ObDereferenceObject(m_pObject);
-			m_pObject = nullptr;
-		}
-		m_CreatedReference = false;
-	}
-#endif
-}
-
-#if UCFG_WDM
-void SafeHandle::AttachKernelObject(void *pObj, bool bKeepRef) {
-	InternalReleaseHandle();
-	m_CreatedReference = bKeepRef;
-	m_pObject = pObj;
-}
-
-NTSTATUS SafeHandle::InitFromHandle(HANDLE h, ACCESS_MASK DesiredAccess, POBJECT_TYPE ObjectType, KPROCESSOR_MODE  AccessMode) {
-	KEVENT *p;
-	NTSTATUS st = ObReferenceObjectByHandle(h, DesiredAccess, ObjectType, AccessMode, (void**)&p, 0);
-	AttachKernelObject(p, true);
-	return st;
-}
-
-#endif
-
-void SafeHandle::ReleaseHandle(intptr_t h) const {
-#if UCFG_USE_POSIX
-	CCheck(::close((int)h));
-#elif UCFG_WIN32
-	Win32Check(::CloseHandle((HANDLE)h));
-#else
-	NtCheck(::ZwClose((HANDLE)h));
-#endif
-}
-
-/*!!!
-void SafeHandle::CloseHandle() {
-if (Valid() && m_bOwn)
-Win32Check(::CloseHandle(exchange(m_handle, (HANDLE)0)));
-}*/
-
-intptr_t SafeHandle::DangerousGetHandle() const {
-	if (!m_aInUse)
-		Throw(ExtErr::ObjectDisposed);
-	return m_aHandle.load();
-}
-
-void SafeHandle::AfterAttach(bool bOwn) {
-	if (Valid()) {
-		m_aInUse = 1;
-		m_abClosed = false;
-		m_bOwn = bOwn;
-	} else {
-		m_aHandle = m_invalidHandleValue;
-#if UCFG_USE_POSIX
-		CCheck(-1);
-#elif UCFG_WIN32
-		Win32Check(false);
-#endif
-	}
-}
-
-void SafeHandle::ThreadSafeAttach(intptr_t handle, bool bOwn) {
-	intptr_t prev = m_invalidHandleValue;
-	if (m_aHandle.compare_exchange_strong(prev, handle))
-		AfterAttach(bOwn);
-	else
-		ReleaseHandle(handle);		
-}
-
-void SafeHandle::Attach(intptr_t handle, bool bOwn) {
-	if (Valid())
-		Throw(ExtErr::AlreadyOpened);
-	m_aHandle = handle;
-	AfterAttach(bOwn);
-}
-
-intptr_t SafeHandle::Detach() { //!!!
-	m_abClosed = true;
-	m_aInUse = 0;
-	m_bOwn = false;
-	return m_aHandle.exchange(m_invalidHandleValue);
-}
-
-void SafeHandle::Duplicate(intptr_t h, uint32_t dwOptions) {
-#if UCFG_WIN32
-	if (Valid())
-		Throw(ExtErr::AlreadyOpened);
-	HANDLE hMy;
-	Win32Check(::DuplicateHandle(GetCurrentProcess(), (HANDLE)h, GetCurrentProcess(), &hMy, 0, FALSE, dwOptions));
-	m_aHandle = intptr_t(hMy);
-	m_aInUse = 1;
-	m_abClosed = false;
-#else
-	Throw(E_NOTIMPL);
-#endif
-}
-
-bool SafeHandle::Valid() const {
-	return m_aHandle != 0 && m_aHandle != m_invalidHandleValue;
-}
-
-SafeHandle::BlockingHandleAccess::BlockingHandleAccess(const SafeHandle& h)
-	:	HandleAccess(h)
-{
-#ifndef WDM_DRIVER
-	m_pPrev = (HandleAccess*)(void*)t_pCurrentHandle;
-	t_pCurrentHandle = this;
-#endif
-
-	/*!!!
-	if (m_sock.m_socketThreader)
-	{
-	if (m_sock.m_socketThreader->m_bClosing)
-	m_sock.Close();
-	//!!!R			m_sock.m_socketThreader->m_lock.Lock();	
-	m_prevKeeper = exchange(m_sock.m_socketThreader->m_pCurrentHandleKeeper, this);
-	}*/
-}
-
-SafeHandle::BlockingHandleAccess::~BlockingHandleAccess() {
-#ifndef WDM_DRIVER
-	t_pCurrentHandle = m_pPrev;
-#endif
-
-	/*!!!
-	if (m_sock.m_socketThreader)
-	{
-	if (m_sock.m_socketThreader->m_bClosing)
-	m_sock.Close();
-	m_sock.m_socketThreader->m_pCurrentHandleKeeper = m_prevKeeper;
-	//!!!R			m_sock.m_socketThreader->m_lock.Unlock();	
-	}*/
-}
 
 #if !UCFG_WDM
 thread_specific_ptr<String> Exception::t_LastStringArg;
@@ -324,8 +133,8 @@ const error_category& AFXAPI hresult_category() {
 }
 
 Exception::Exception(HRESULT hr, RCString message)
-	:	base(hr, hresult_category(), message.empty() ? string() : string(explicit_cast<string>(message)))
-	,	m_message(message)
+	: base(hr, hresult_category(), message.empty() ? string() : string(explicit_cast<string>(message)))
+	, m_message(message)
 {
 #if !UCFG_WCE
 	if (CStackTrace::Use)
@@ -406,7 +215,7 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(const error_code& ec) {
 		{
 			DirectoryNotFoundExc e;
 			throw e;
-		}		
+		}
 		*/
 	case HRESULT_OF_WIN32(ERROR_PROC_NOT_FOUND):
 		{
@@ -421,7 +230,7 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(const error_code& ec) {
 //!!!R		::MessageBox(0, _T(" aa"), _T(" aa"), MB_OK); //!!!D
 	default:
 		throw Exception(ec);
-	}	
+	}
 #endif
 }
 
@@ -438,15 +247,16 @@ static int s_initThrowImp = (SetThrowImp(&ThrowImp), 1);
 
 #endif // UCFG_CRT=='U' && !UCFG_WDM
 
-
-
-
-DECLSPEC_NORETURN void AFXAPI ThrowImp(const error_code& ec, const char *funname, int nLine) {
+static void TraceError(const error_code& ec, const char* funname, int nLine) {		// In separate function to decrease stack frame size of ThrowImp(). Important during unwinding
 #if UCFG_EH_SUPPORT_IGNORE
 	if (!CLocalIgnoreBase::ErrorCodeIsIgnored(ec)) {
-		TRC(1, funname <<  "(Ln" << nLine << "): " << (ec.category()==hresult_category() ? EXT_STR("HRESULT:" << hex << ec.value()) : EXT_STR(ec)) << " " << ec.message());
+		TRC(1, funname << "(Ln" << nLine << "): " << (ec.category() == hresult_category() ? EXT_STR("HRESULT:" << hex << ec.value()) : EXT_STR(ec)) << " " << ec.message());
 	}
 #endif
+}
+
+DECLSPEC_NORETURN void AFXAPI ThrowImp(const error_code& ec, const char *funname, int nLine) {
+	TraceError(ec, funname, nLine);
 	ThrowImp(ec);
 }
 
@@ -454,7 +264,7 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr, const char *funname, int nLin
 	ThrowImp(error_code(hr, hresult_category()), funname, nLine);
 }
 
-typedef map<int, CExceptionFabric*> CExceptionFabrics; 
+typedef map<int, CExceptionFabric*> CExceptionFabrics;
 static InterlockedSingleton<CExceptionFabrics> g_exceptionFabrics;
 
 CExceptionFabric::CExceptionFabric(int facility) {
@@ -462,7 +272,7 @@ CExceptionFabric::CExceptionFabric(int facility) {
 }
 
 DECLSPEC_NORETURN void AFXAPI ThrowS(HRESULT hr, RCString msg) {
-	TRC(1, "Error " << hex << hr << " " << (!!msg ? msg : String())); 
+	TRC(1, "Error " << hex << hr << " " << (!!msg ? msg : String()));
 
 	int facility = HRESULT_FACILITY(hr);
 	CExceptionFabrics::iterator i = (*g_exceptionFabrics).find(facility);
@@ -534,7 +344,7 @@ void AFXAPI ProcessExceptionInCatch() {
 #if UCFG_USE_POSIX
 	_exit(ERR_UNHANDLED_EXCEPTION);
 #else
-	//!!! Error in DLLS ::ExitProcess(ERR_UNHANDLED_EXCEPTION);	
+	//!!! Error in DLLS ::ExitProcess(ERR_UNHANDLED_EXCEPTION);
 	::TerminateProcess(::GetCurrentProcess(), ERR_UNHANDLED_EXCEPTION);
 #endif
 }
@@ -546,9 +356,9 @@ void AFXAPI ProcessExceptionInCatch() {
 String CEscape::Escape(CEscape& esc, RCString s) {
 	UTF8Encoding utf8;
 	Blob blob = utf8.GetBytes(s);
-	size_t size = blob.Size;
+	size_t size = blob.size();
 	ostringstream os;
-	const char *p = (const char*)blob.constData(); 
+	const char *p = (const char*)blob.constData();
 	for (size_t i=0; i<size; ++i) {
 		char ch = p[i];
 		esc.EscapeChar(os, ch);
@@ -557,14 +367,14 @@ String CEscape::Escape(CEscape& esc, RCString s) {
 }
 
 String CEscape::Unescape(CEscape& esc, RCString s) {
-	vector<byte> v;
+	vector<uint8_t> v;
 	istringstream is(s.c_str());
-	for (int ch; (ch=esc.UnescapeChar(is))!=EOF;)
-		v.push_back((byte)ch);
+	for (int ch; (ch = esc.UnescapeChar(is)) != EOF;)
+		v.push_back((uint8_t)ch);
 	UTF8Encoding utf8;
 	if (v.empty())
 		return String();
-	return utf8.GetChars(ConstBuf(&v[0], v.size()));
+	return utf8.GetChars(Span(&v[0], v.size()));
 }
 
 String AssertFailedExc::get_Message() const {
@@ -654,7 +464,7 @@ retptr =((ptr +PTR_SZ +gap +align +offset)&~align)- offset;
 
 return (void *)retptr;
 }
-	
+
 __declspec(dllexport) void  __cdecl my_aligned_free(void *memblock)
 {
 		uintptr_t ptr;
@@ -680,19 +490,19 @@ __declspec(dllexport) void  __cdecl my_aligned_free(void *memblock)
 
 
 extern "C" void _cdecl AfxTestEHsStub(void *prevFrame) {
-	if (((byte*)prevFrame - (byte*)&prevFrame) < 5*sizeof(void*)) {		
+	if (((uint8_t*)prevFrame - (uint8_t*)&prevFrame) < 5 * sizeof(void *)) {
 #if UCFG_WDM
 		KeBugCheck(E_FAIL);
 #else
 		std::cerr << "Should be compiled with /EHs /EHc-" << endl;
-		abort();														
+		abort();
 #endif
 	}
 	//!!!ThrowImp(1);
 }
 
 size_t AFXAPI hash_value(const void * key, size_t len) {
-	return MurmurHashAligned2(ConstBuf(key, len), _HASH_SEED);			
+	return MurmurHashAligned2(Span((const uint8_t*)key, len), _HASH_SEED);
 }
 
 
@@ -708,7 +518,7 @@ PFN_memcpy g_fastMemcpy = &memcpy;
 void *MemcpySse(void *dest, const void *src, size_t count);
 
 static int InitFastMemcpy() {
-	if (Ext::CpuInfo().HasSse)
+	if (Ext::CpuInfo().get_Features().SSE)
 		g_fastMemcpy = &MemcpySse;
 	return 1;
 }
@@ -718,10 +528,13 @@ static int s_initFastMemcpy = InitFastMemcpy();
 #endif
 
 #if UCFG_CPU_X86_X64
-byte g_bHasSse2;
+uint8_t g_bHasSse2, g_bHasAvx, g_bHasAvx2;
 
 static int InitBignumFuns() {
-	g_bHasSse2 = Ext::CpuInfo().HasSse2;
+	const Ext::CpuInfo::FeatureInfo& f = Ext::CpuInfo().get_Features();
+	g_bHasSse2 = f.SSE2;
+	g_bHasAvx = f.AVX;
+	g_bHasAvx2 = f.AVX2;
 	return 1;
 }
 
@@ -741,3 +554,21 @@ namespace ExtSTL {
 } // ExtSTL::
 
 
+#if UCFG_DEFINE_NEW
+void * __cdecl operator new(size_t sz) {
+	return Ext::Malloc(sz);
+}
+
+void __cdecl operator delete(void *p) {
+	free(p);
+}
+
+void __cdecl operator delete[](void* p) {
+	free(p);
+}
+
+void * __cdecl operator new[](size_t sz) {
+	return Ext::Malloc(sz);
+}
+
+#endif // UCFG_DEFINE_NEW
